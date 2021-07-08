@@ -9,11 +9,11 @@ from collections import defaultdict
 
 from azure.identity import ClientSecretCredential
 from azure.common.credentials import ServicePrincipalCredentials
-from azure.mgmt.dns import DnsManagementClient
+from azure.mgmt.privatedns import PrivateDnsManagementClient
 from azure.mgmt.trafficmanager import TrafficManagerManagementClient
 
-from azure.mgmt.dns.models import ARecord, AaaaRecord, CaaRecord, \
-    CnameRecord, MxRecord, SrvRecord, NsRecord, PtrRecord, TxtRecord, Zone
+from azure.mgmt.privatedns.models import ARecord, AaaaRecord, \
+    CnameRecord, MxRecord, SrvRecord, PtrRecord, TxtRecord, PrivateZone
 from azure.mgmt.trafficmanager.models import Profile, DnsConfig, \
     MonitorConfig, Endpoint, MonitorConfigCustomHeadersItem
 
@@ -68,11 +68,11 @@ class _AzureRecord(object):
     TYPE_MAP = {
         'A': ARecord,
         'AAAA': AaaaRecord,
-        'CAA': CaaRecord,
+        #'CAA': CaaRecord,
         'CNAME': CnameRecord,
         'MX': MxRecord,
         'SRV': SrvRecord,
-        'NS': NsRecord,
+        #'NS': NsRecord,
         'PTR': PtrRecord,
         'TXT': TxtRecord
     }
@@ -505,7 +505,7 @@ class AzureProvider(BaseProvider):
             logger_name = 'azure.core.pipeline.policies.http_logging_policy'
             logger = logging.getLogger(logger_name)
             logger.info = logger.debug
-            self.__dns_client = DnsManagementClient(
+            self.__dns_client = PrivateDnsManagementClient(
                 credential=ClientSecretCredential(
                     client_id=self._dns_client_client_id,
                     client_secret=self._dns_client_key,
@@ -531,7 +531,7 @@ class AzureProvider(BaseProvider):
 
     def _populate_zones(self):
         self.log.debug('azure_zones: loading')
-        list_zones = self._dns_client.zones.list_by_resource_group
+        list_zones = self._dns_client.private_zones.list_by_resource_group
         for zone in list_zones(self._resource_group):
             self._azure_zones.add(zone.name.rstrip('.'))
 
@@ -555,8 +555,8 @@ class AzureProvider(BaseProvider):
         # If not, and its time to create, lets do it.
         if create:
             self.log.debug('_check_zone:no matching zone; creating %s', name)
-            create_zone = self._dns_client.zones.create_or_update
-            create_zone(self._resource_group, name, Zone(location='global'))
+            create_zone = self._dns_client.private_zones.begin_create_or_update
+            create_zone(self._resource_group, name, PrivateZone(location='global'))
             self._azure_zones.add(name)
             return name
         else:
@@ -631,7 +631,7 @@ class AzureProvider(BaseProvider):
         zone_name = zone.name[:-1]
         self._populate_zones()
 
-        records = self._dns_client.record_sets.list_by_dns_zone
+        records = self._dns_client.record_sets.list
         if self._check_zone(zone_name):
             exists = True
             for azrecord in records(self._resource_group, zone_name):
@@ -1239,7 +1239,7 @@ class AzureProvider(BaseProvider):
         create = self._dns_client.record_sets.create_or_update
 
         create(resource_group_name=ar.resource_group,
-               zone_name=ar.zone_name,
+               private_zone_name=ar.zone_name,
                relative_record_set_name=ar.relative_record_set_name,
                record_type=ar.record_type,
                parameters=ar.params)
